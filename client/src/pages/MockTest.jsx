@@ -1,4 +1,3 @@
-// client/src/pages/MockTest.jsx
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -7,23 +6,37 @@ const MockTest = () => {
   const [questions, setQuestions] = useState([]);
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [timeLeft, setTimeLeft] = useState(600);
+  const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  // Dynamic API URL (Works for Localhost AND Vercel)
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+  // 1. Fetch Questions
   useEffect(() => {
-    axios.get('http://localhost:5000/api/tests/questions')
-      .then(res => setQuestions(res.data))
-      .catch(err => console.error(err));
+    const fetchQuestions = async () => {
+      try {
+        const { data } = await axios.get(`${API_URL}/tests/questions`);
+        setQuestions(data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching questions:", error);
+        setLoading(false);
+      }
+    };
+    fetchQuestions();
   }, []);
 
+  // 2. Timer Logic
   useEffect(() => {
-    if (timeLeft > 0) {
+    if (timeLeft > 0 && !loading) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
-    } else {
-      handleSubmit();
+    } else if (timeLeft === 0 && !loading) {
+      handleSubmit(); // Auto-submit when time runs out
     }
-  }, [timeLeft]);
+  }, [timeLeft, loading]);
 
   const formatTime = (s) => `${Math.floor(s / 60)}:${s % 60 < 10 ? '0' : ''}${s % 60}`;
 
@@ -36,13 +49,21 @@ const MockTest = () => {
       questionId: key,
       selectedOption: answers[key]
     }));
-    const { data } = await axios.post('http://localhost:5000/api/tests/submit', { answers: payload });
-    navigate('/result', { state: data });
+
+    try {
+      const { data } = await axios.post(`${API_URL}/tests/submit`, { answers: payload });
+      navigate('/result', { state: data });
+    } catch (error) {
+      alert('Error submitting test. Please try again.');
+    }
   };
 
-  if (!questions.length) return (
-    <div className="d-flex justify-content-center align-items-center vh-100">
-      <div className="spinner-border text-primary" role="status"></div>
+  // Loading State
+  if (loading) return (
+    <div className="d-flex justify-content-center align-items-center min-vh-100">
+      <div className="spinner-border text-primary" style={{width: '3rem', height: '3rem'}} role="status">
+        <span className="visually-hidden">Loading...</span>
+      </div>
     </div>
   );
 
@@ -51,48 +72,63 @@ const MockTest = () => {
       <div className="row justify-content-center">
         <div className="col-lg-8 col-md-10">
           
+          {/* Header: Timer & Count */}
           <div className="d-flex justify-content-between align-items-center mb-4">
-            <h3 className="fw-bold text-dark mb-0">Question {currentQ + 1} of {questions.length}</h3>
+            <h4 className="fw-bold text-dark mb-0">
+              Question {currentQ + 1} <span className="text-muted fs-6">/ {questions.length}</span>
+            </h4>
             <div className={`badge p-3 fs-5 rounded-pill shadow-sm ${timeLeft < 60 ? 'bg-danger' : 'bg-primary'}`}>
               ⏱ {formatTime(timeLeft)}
             </div>
           </div>
 
-          <div className="progress mb-4 rounded-pill shadow-sm" style={{ height: '12px' }}>
+          {/* Progress Bar */}
+          <div className="progress mb-4 rounded-pill shadow-sm bg-white" style={{ height: '12px' }}>
             <div 
               className="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
               style={{ width: `${((currentQ + 1) / questions.length) * 100}%` }}
             ></div>
           </div>
 
-          <div className="card shadow-lg p-4 mb-4 border-0">
+          {/* Question Card */}
+          <div className="card shadow-lg p-4 mb-4 border-0 rounded-4">
             <div className="card-body">
-              <span className="badge bg-soft-primary text-primary border border-primary mb-3 px-3 py-2 uppercase">
+              <span className="badge bg-light text-primary border border-primary mb-3 px-3 py-2 text-uppercase">
                 {questions[currentQ].category || "General"}
               </span>
-              <h2 className="card-title fw-bold mb-5 mt-2">{questions[currentQ].question}</h2>
+              <span className="badge bg-light text-secondary border border-secondary mb-3 ms-2 px-3 py-2 text-uppercase">
+                {questions[currentQ].difficulty || "Medium"}
+              </span>
 
-              <div className="row g-3">
+              <h3 className="card-title fw-bold mb-4 mt-2 lh-base">{questions[currentQ].question}</h3>
+
+              <div className="d-grid gap-3">
                 {questions[currentQ].options.map((opt, idx) => {
                   const isSelected = answers[questions[currentQ]._id] === idx;
                   return (
-                    <div className="col-12" key={idx}>
-                      <button
-                        onClick={() => handleOptionSelect(idx)}
-                        className={`btn btn-lg w-100 text-start p-4 border-2 rounded-4 ${
-                          isSelected ? 'btn-primary shadow' : 'btn-outline-secondary'
-                        }`}
-                      >
-                        <span className="me-3 fw-bold">{idx + 1}.</span> {opt}
-                      </button>
-                    </div>
+                    <button
+                      key={idx}
+                      onClick={() => handleOptionSelect(idx)}
+                      className={`btn btn-lg text-start p-3 border-2 rounded-3 transition-all ${
+                        isSelected 
+                          ? 'btn-primary shadow border-primary' 
+                          : 'btn-outline-secondary border-light-subtle text-dark hover-shadow'
+                      }`}
+                      style={{ transition: '0.2s' }}
+                    >
+                      <span className={`fw-bold me-2 px-2 py-1 rounded ${isSelected ? 'bg-white text-primary' : 'bg-light text-dark'}`}>
+                        {idx + 1}
+                      </span> 
+                      {opt}
+                    </button>
                   );
                 })}
               </div>
             </div>
           </div>
 
-          <div className="d-flex justify-content-between pt-3">
+          {/* Navigation Buttons */}
+          <div className="d-flex justify-content-between pt-2">
             <button 
               className="btn btn-outline-dark btn-lg px-4 rounded-pill" 
               disabled={currentQ === 0} 
@@ -102,15 +138,22 @@ const MockTest = () => {
             </button>
             
             {currentQ === questions.length - 1 ? (
-              <button className="btn btn-success btn-lg px-5 rounded-pill fw-bold shadow" onClick={handleSubmit}>
-                Submit Final ✅
+              <button 
+                className="btn btn-success btn-lg px-5 rounded-pill fw-bold shadow" 
+                onClick={handleSubmit}
+              >
+                Submit Test ✅
               </button>
             ) : (
-              <button className="btn btn-primary btn-lg px-5 rounded-pill fw-bold shadow" onClick={() => setCurrentQ(curr => curr + 1)}>
+              <button 
+                className="btn btn-primary btn-lg px-5 rounded-pill fw-bold shadow" 
+                onClick={() => setCurrentQ(curr => curr + 1)}
+              >
                 Next →
               </button>
             )}
           </div>
+
         </div>
       </div>
     </div>
